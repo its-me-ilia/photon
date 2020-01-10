@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Document</title>
+</head>
+<body>
+    <h1>gelacho garbachoa</h1>
+    <button id="startBtn">Start Recording</button>
+    <button id="stopBtn">Stop Recording</button>
+    <script>
+        const electron = require('electron');
+        const fs = require('fs');
+        const {promisify} = require('util');
+        const {ipcRenderer,desktopCapturer} = electron;
+        var recorder;
+        var blobs = [];
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        startBtn.onclick = async () => {
+            desktopCapturer.getSources({types: ['window', 'screen']}).then(async sources => {
+                for (const source of sources) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            audio: false,
+                            video: {
+                                mandatory: {
+                                    chromeMediaSource: 'desktop',
+                                    chromeMediaSourceId: source.id,
+                                    maxWidth: screen.availWidth,
+                                    minWidth: screen.availWidth,
+                                    maxHeight: screen.availHeight,
+                                    minHeight: screen.availHeight,
+                                    maxFrameRate: {
+                                        ideal: 60
+                                    }
+                                }
+                            }
+                        })
+                        handleStream(stream)
+                    } catch (e) {
+                        console.log(err.message)
+                        return
+                    }
+                }
+            })
+        };
+        stopBtn.onclick = async () => {
+            stopRecording()
+        }
+        const handleStream = (stream) => {
+            try{
+                recorder = new MediaRecorder(stream);
+                blobs = [];
+                recorder.ondataavailable = function(event){
+                    blobs.push(event.data);
+                }
+                recorder.start();
+            }catch(err){
+                console.log(err.message);
+            }
+        }
+        const stopRecording = async () => {
+            try{
+                recorder.stop()
+                recorder.onstop = async function(e){
+                    const ab = await toArrayBuffer(new Blob(blobs, {type: 'video/mp4'}));
+                    const buffer = toBuffer(ab);
+                    const path = `./recordings/example.mp4`;
+                    const writeFile = promisify(fs.writeFile);
+                    const file = await writeFile(path, buffer);
+                }
+            }catch(err){
+                console.log(err.message)
+            }
+        }
+        const toArrayBuffer = async function(blob){
+            return new Promise(function(resolve,reject){
+                try{
+                let fileReader = new FileReader();
+                fileReader.onload = function(){
+                    let arrayBuffer = this.result;
+                    resolve(arrayBuffer)
+                }
+                fileReader.readAsArrayBuffer(blob)
+                }catch(err){
+                    reject(err)
+                }
+            })
+        }
+        const toBuffer = function(val) {
+            let buffer = new Buffer(val.byteLength);
+            let array = new Uint8Array(val);
+            for(var i = 0; i < array.byteLength; i++){
+                buffer[i] = array[i];
+            }
+            return buffer;
+        }
+    </script>
+</body>
+</html>
